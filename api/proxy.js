@@ -16,8 +16,13 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify(body)
     });
-    const data = await response.json();
-    res.status(response.status).json(data);
+    const text = await response.text();
+    try {
+      const data = JSON.parse(text);
+      res.status(response.status).json(data);
+    } catch(e) {
+      res.status(500).json({ error: 'Risposta non JSON', raw: text.substring(0, 200) });
+    }
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
