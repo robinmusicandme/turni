@@ -275,11 +275,20 @@ async function handlePhoto(input) {
   preview.src = URL.createObjectURL(file);
   document.getElementById('uploadArea').classList.add('hidden');
   document.getElementById('photoPreviewArea').classList.remove('hidden');
-  photoType = file.type || 'image/jpeg';
+  photoType = 'image/jpeg';
   photoB64 = await new Promise(res => {
-    const r = new FileReader();
-    r.onload = () => res(r.result.split(',')[1]);
-    r.readAsDataURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const max = 1200;
+      let w = img.width, h = img.height;
+      if (w > max) { h = h * max / w; w = max; }
+      if (h > max) { w = w * max / h; h = max; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      res(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+    };
+    img.src = URL.createObjectURL(file);
   });
   await extractShifts();
 }
