@@ -308,11 +308,9 @@ async function extractShifts() {
   const s = document.getElementById('extractStatus');
   s.innerHTML = `<div class="status info"><div class="spinner"></div><span>Analisi foto in corso…</span></div>`;
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch('https://turni-beryl.vercel.app/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      'x-api-key': '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',
-'anthropic-version': '2023-06-01',
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
