@@ -241,8 +241,15 @@ function handleAuthCallback() {
   const token = params.get('access_token');
   if (token) {
     accessToken = token;
+    localStorage.setItem('gToken', token);
     history.replaceState(null, '', window.location.pathname);
     fetchUserInfo();
+  } else {
+    const saved = localStorage.getItem('gToken');
+    if (saved) {
+      accessToken = saved;
+      fetchUserInfo();
+    }
   }
 }
 
@@ -262,6 +269,7 @@ async function fetchUserInfo() {
 
 function logout() {
   accessToken = null;
+  localStorage.removeItem('gToken');
   document.getElementById('authLoggedOut').classList.remove('hidden');
   document.getElementById('authLoggedIn').classList.add('hidden');
   document.getElementById('authDot').classList.remove('green');
