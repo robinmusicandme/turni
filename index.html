@@ -222,7 +222,7 @@
 
 <script>
 const CLIENT_ID = '943476118556-qdqca2vhcbjg8gqfsab26jrhdrf79qag.apps.googleusercontent.com';
-const REDIRECT_URI = 'https://robinmusicandme.github.io/turni/';
+const REDIRECT_URI = 'https://turni-beryl.vercel.app/';
 const SCOPE = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email';
 
 let accessToken = null;
@@ -299,7 +299,7 @@ async function extractShifts() {
   const s = document.getElementById('extractStatus');
   s.innerHTML = `<div class="status info"><div class="spinner"></div><span>Analisi foto in corso…</span></div>`;
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
