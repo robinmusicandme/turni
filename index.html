@@ -326,7 +326,7 @@ async function extractShifts() {
           role: 'user',
           content: [
             { type: 'image', source: { type: 'base64', media_type: photoType, data: photoB64 } },
-            { type: 'text', text: 'Questa è una foto di una tabella turni lavorativi. Segui questi passi nell\'ordine:\n\nPASS 1 - INTESTAZIONE: Leggi la prima riga della tabella e identifica ogni colonna con la sua data esatta (es. "16.3" = 2026-03-16, "17.3" = 2026-03-17 ecc). Elenca mentalmente ogni colonna e la sua data.\n\nPASS 2 - TROVA LA RIGA: Scorri la prima colonna a sinistra e trova esattamente la riga che contiene "INTERDONATO" e "ROBERTO". Ignora completamente tutte le altre righe.\n\nPASS 3 - LEGGI CELLA PER CELLA: Per ogni colonna della riga trovata, leggi il contenuto. Se c\'è un orario (es. 06:00-14:00) annotalo con la data corrispondente dalla colonna. Se c\'è un trattino "-" o è vuota, ignorala.\n\nPASS 4 - VERIFICA: Controlla che ogni orario sia associato alla data corretta della sua colonna, non della colonna vicina.\n\nRispondi SOLO con un JSON array nel formato: [{"date":"YYYY-MM-DD","start":"HH:MM","end":"HH:MM"}]. Zero testo aggiuntivo, zero markdown.' }
+            { type: 'text', text: Questa è una foto di una tabella turni lavorativi.\n\nPASS 1 - INTESTAZIONE: Leggi la prima riga e identifica le date nel formato "GG.M." es. "23.3." = 2026-03-23, "24.3." = 2026-03-24. Alcune date potrebbero avere una sottocolonna "Commenti" accanto, altre no — adattati.\n\nPASS 2 - TROVA LA RIGA: Trova la riga che contiene "INTERDONATO" e "ROBERTO" nella prima colonna a sinistra.\n\nPASS 3 - LEGGI CELLA PER CELLA: Per ogni giorno nella riga di INTERDONATO ROBERTO:\n- Leggi la cella "Intervallo turno" — se c\'è un orario annotalo, se c\'è trattino o vuoto ignorala\n- Se esiste una cella "Commenti" accanto, leggi il suo contenuto (es. "carne", "pescheria" ecc). Se è vuota o ha "--" trattala come assente.\n\nPASS 4 - VERIFICA: Controlla che ogni orario sia associato alla data corretta.\n\nRispondi SOLO con JSON array: [{"date":"YYYY-MM-DD","start":"HH:MM","end":"HH:MM","note":"testo commento o stringa vuota"}]. Zero testo aggiuntivo.
           ]
         }]
       })
@@ -411,9 +411,10 @@ async function insertEvents() {
         d.setDate(d.getDate() + 1);
         endDate = d.toISOString().split('T')[0];
       }
-      const body = {
-        summary: 'Turno lavoro',
+const body = {
+        summary: shift.note ? `Turno lavoro — ${shift.note}` : 'Turno lavoro',
         colorId,
+        description: shift.note || '',
         start: { dateTime: `${shift.date}T${shift.start}:00`, timeZone: 'Europe/Rome' },
         end:   { dateTime: `${endDate}T${shift.end}:00`, timeZone: 'Europe/Rome' },
         reminders: { useDefault: false, overrides: [] }
