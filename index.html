@@ -393,47 +393,49 @@ async function getOrCreateCalendar() {
   return cal.id;
 }
 
-async function insertEvents() {
-  if (!accessToken || extractedShifts.length === 0) return;
-  const btn = document.getElementById('insertBtn');
-  const s = document.getElementById('insertStatus');
-  const colorId = document.getElementById('eventColor').value;
-  btn.disabled = true;
-  s.innerHTML = `<div class="status info" style="margin-top:10px;"><div class="spinner"></div><span>Creazione eventi…</span></div>`;
+async function extractShifts() {
+  const s = document.getElementById('extractStatus');
+  s.innerHTML = `<div class="status info"><div class="spinner"></div><span>Analisi struttura tabella...</span></div>`;
   try {
-    const calId = await getOrCreateCalendar();
-    let ok = 0;
-    for (let i = 0; i < extractedShifts.length; i++) {
-      const shift = extractedShifts[i];
-      let endDate = shift.date;
-      if (shift.end < shift.start) {
-        const d = new Date(shift.date + 'T00:00:00');
-        d.setDate(d.getDate() + 1);
-        endDate = d.toISOString().split('T')[0];
-      }
-const body = {
-        summary: shift.note ? `Turno lavoro — ${shift.note}` : 'Turno lavoro',
-        colorId,
-        description: shift.note || '',
-        start: { dateTime: `${shift.date}T${shift.start}:00`, timeZone: 'Europe/Rome' },
-        end:   { dateTime: `${endDate}T${shift.end}:00`, timeZone: 'Europe/Rome' },
-        reminders: { useDefault: false, overrides: [] }
-      };
-      const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, {
+    const call = async (prompt) => {
+      const resp = await fetch('https://turni-beryl.vercel.app/api/proxy', {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: photoType, data: photoB64 } },
+            { type: 'text', text: prompt }
+          ]}]
+        })
       });
-      if (r.ok) {
-        ok++;
-        const badge = document.getElementById('badge-' + i);
-        if (badge) { badge.textContent = 'fatto'; badge.classList.add('done'); }
-      }
+      const data = await resp.json();
+      return data.content?.find(c => c.type === 'text')?.text?.trim() || '';
+    };
+
+    const step1 = await call('Guarda questa tabella turni. Dimmi: 1) Quante colonne ci sono in totale dopo la colonna Nome? 2) Le colonne hanno sottocolonne tipo "Commenti"? Si o no? 3) Elenca le date che vedi nella prima riga intestazione nel formato GG.M = YYYY-MM-DD. Rispondi in modo breve e preciso.');
+
+    s.innerHTML = `<div class="status info"><div class="spinner"></div><span>Estrazione turni in corso...</span></div>`;
+
+    const step2 = await call(`Questa e una tabella turni. Analisi struttura gia fatta: ${step1}\n\nOra trova la riga di INTERDONATO ROBERTO e per ogni data identificata nella struttura, leggi la cella "Intervallo turno" corrispondente. Ancora: OGNI DATA deve essere verificata — se la cella e vuota o ha trattino e un giorno di riposo, non includerla. Non spostare MAI un orario su una data diversa da quella della sua colonna.\n\nRispondi SOLO con JSON array: [{"date":"YYYY-MM-DD","start":"HH:MM","end":"HH:MM","note":"commento o vuoto"}]. Zero testo aggiuntivo.`);
+
+    const clean = step2.replace(/```json|```/g, '').trim();
+    extractedShifts = JSON.parse(clean);
+
+    if (extractedShifts.length === 0) {
+      s.innerHTML = `<div class="status warn">Nessun turno trovato. Ricontrolla la foto.</div>`;
+      return;
     }
-    s.innerHTML = `<div class="status success fade-in" style="margin-top:10px;">✓ ${ok} eventi inseriti in "Turni Lavoro"</div>`;
+
+    s.innerHTML = `<div class="status success fade-in">Trovati ${extractedShifts.length} turni</div>`;
+    renderShifts();
+    document.getElementById('cardShifts').classList.remove('hidden');
+    document.getElementById('cardInsert').classList.remove('hidden');
+    checkInsertReady();
+
   } catch(e) {
-    s.innerHTML = `<div class="status error" style="margin-top:10px;">Errore: ${e.message}</div>`;
-    btn.disabled = false;
+    s.innerHTML = `<div class="status error">Errore: ${e.message}</div>`;
   }
 }
 
