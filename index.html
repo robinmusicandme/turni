@@ -424,7 +424,9 @@ async function extractShifts() {
     console.log('STEP2:', step2);
     const match = step2.match(/\[[\s\S]*\]/);
     if (!match) throw new Error('Nessun JSON trovato nella risposta: ' + step2.substring(0, 200));
-    extractedShifts = JSON.parse(match[0]);
+    let parsed = JSON.parse(match[0]);
+    parsed = parsed.map(s => ({ ...s, date: s.date.replace(/^202[0-9]/, new Date().getFullYear().toString()) }));
+    extractedShifts = parsed;
 
     if (extractedShifts.length === 0) {
       s.innerHTML = `<div class="status warn">Nessun turno trovato. Ricontrolla la foto.</div>`;
