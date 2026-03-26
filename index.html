@@ -181,6 +181,10 @@
 
   <div class="card" id="cardPhoto">
     <div class="card-title"><div class="dot" id="photoDot"></div>Foto turni</div>
+    <div style="margin-bottom:12px;">
+      <div class="section-label">Data inizio settimana (es. 23/03/2026)</div>
+      <input type="text" id="weekStart" placeholder="GG/MM/AAAA" style="width:100%;padding:12px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:14px;" />
+    </div>
     <div id="uploadArea">
       <div class="upload-zone" id="uploadZone">
         <input type="file" accept="image/*" id="photoInput" onchange="handlePhoto(this)">
@@ -314,7 +318,30 @@ function resetPhoto() {
 
 async function extractShifts() {
   const s = document.getElementById('extractStatus');
-  s.innerHTML = `<div class="status info"><div class="spinner"></div><span>Analisi foto in corso…</span></div>`;
+  const weekInput = document.getElementById('weekStart').value.trim();
+  if (!weekInput) {
+    s.innerHTML = `<div class="status warn">Inserisci la data di inizio settimana prima di caricare la foto.</div>`;
+    return;
+  }
+
+  const parts = weekInput.split('/');
+  if (parts.length !== 3) {
+    s.innerHTML = `<div class="status warn">Formato data non valido. Usa GG/MM/AAAA es. 23/03/2026</div>`;
+    return;
+  }
+
+  const monday = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T12:00:00`);
+  const weekDates = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    weekDates.push(d.toISOString().split('T')[0]);
+  }
+  const dayNames = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+  const weekInfo = weekDates.map((d, i) => `${dayNames[i]} = ${d}`).join(', ');
+
+  s.innerHTML = `<div class="status info"><div class="spinner"></div><span>Analisi foto in corso...</span></div>`;
+
   try {
     const resp = await fetch('https://turni-beryl.vercel.app/api/proxy', {
       method: 'POST',
@@ -322,28 +349,30 @@ async function extractShifts() {
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: photoType, data: photoB64 } },
-            { type: 'text', text: 'Questa e una foto di una tabella turni lavorativi. Ogni colonna corrisponde a un giorno specifico con una data precisa nell\'intestazione.\n\nPASS 1 - MAPPA LE COLONNE: Leggi la prima riga e crea una mappa di tutte le colonne con le loro date. Es: colonna 2 = 23.3. (Lun) = 2026-03-23, colonna 3 = commenti, colonna 4 = 24.3. (Mar) = 2026-03-24, ecc. Le colonne Commenti non hanno date.\n\nPASS 2 - TROVA LA RIGA: Trova la riga INTERDONATO ROBERTO.\n\nPASS 3 - LEGGI OGNI COLONNA CON DATA: Per ogni colonna che ha una data associata, leggi la cella corrispondente nella riga di INTERDONATO ROBERTO. IMPORTANTE: se la cella e vuota o ha trattino, quella data e un giorno di riposo — NON saltarla, semplicemente non includerla nel JSON. Non spostare mai un orario sulla data sbagliata.\n\nPASS 4 - VERIFICA FINALE: Controlla che il numero di date con orario + numero di giorni riposo = numero totale di giorni nella tabella.\n\nRispondi SOLO con JSON array: [{"date":"YYYY-MM-DD","start":"HH:MM","end":"HH:MM","note":"commento o stringa vuota"}]. Zero testo aggiuntivo.' }
-          ]
-        }]
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: photoType, data: photoB64 } },
+          { type: 'text', text: `Questa e una striscia orizzontale di una tabella turni lavorativi. Contiene SOLO la riga di INTERDONATO ROBERTO senza intestazione.\n\nLa settimana inizia il lunedi e le date sono: ${weekInfo}\n\nLa tabella puo avere due formati:\n- Formato A: 7 colonne, una per giorno (Lun Mar Mer Gio Ven Sab Dom)\n- Formato B: 14 colonne, due per giorno (Intervallo turno + Commenti) ripetute 7 volte\n\nContando le colonne capisce quale formato e e associa ogni cella alla data corretta in ordine da sinistra a destra.\n\nPer ogni colonna orario: se c\'e un orario (es. 15:00-21:00) includilo. Se c\'e trattino o vuoto e un giorno di riposo, non includerlo.\nSe presente, leggi anche il commento della colonna accanto.\n\nRispondi SOLO con JSON array: [{"date":"YYYY-MM-DD","start":"HH:MM","end":"HH:MM","note":"commento o vuoto"}]. Zero testo aggiuntivo.` }
+        ]}]
       })
     });
+
     const data = await resp.json();
     const text = data.content?.find(c => c.type === 'text')?.text?.trim() || '';
-    const clean = text.replace(/```json|```/g, '').trim();
-    extractedShifts = JSON.parse(clean);
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error('Risposta non valida: ' + text.substring(0, 100));
+    extractedShifts = JSON.parse(match[0]);
+
     if (extractedShifts.length === 0) {
-      s.innerHTML = `<div class="status warn">⚠ Nessun turno trovato. Ricontrolla la foto.</div>`;
+      s.innerHTML = `<div class="status warn">Nessun turno trovato. Ricontrolla la foto.</div>`;
       return;
     }
-    s.innerHTML = `<div class="status success fade-in">✓ Trovati ${extractedShifts.length} turni</div>`;
+
+    s.innerHTML = `<div class="status success fade-in">Trovati ${extractedShifts.length} turni</div>`;
     renderShifts();
     document.getElementById('cardShifts').classList.remove('hidden');
     document.getElementById('cardInsert').classList.remove('hidden');
     checkInsertReady();
+
   } catch(e) {
     s.innerHTML = `<div class="status error">Errore: ${e.message}</div>`;
   }
