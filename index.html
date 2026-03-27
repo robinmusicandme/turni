@@ -347,7 +347,7 @@ async function extractShifts() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-opus-4-6',
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: photoType, data: photoB64 } },
@@ -387,21 +387,31 @@ function renderShifts() {
     const label = `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
     const midnight = s.end < s.start;
     return `
-      <div class="shift-row fade-in" id="shift-${i}">
-        <div>
+      <div class="shift-row" id="shift-${i}">
+        <div style="flex:1;">
           <div class="shift-day">${label}</div>
           ${midnight ? `<div style="font-size:11px;color:var(--text3);">finisce il giorno dopo</div>` : ''}
+          <div style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+            <input type="time" value="${s.start}" onchange="updateShift(${i},'start',this.value)" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px;font-family:'DM Mono',monospace;">
+            <span style="color:var(--text3);font-size:12px;">→</span>
+            <input type="time" value="${s.end}" onchange="updateShift(${i},'end',this.value)" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px;font-family:'DM Mono',monospace;">
+          </div>
+          ${s.note ? `<div style="font-size:11px;color:var(--text2);margin-top:4px;">${s.note}</div>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <div class="shift-time">${s.start}–${s.end}</div>
           <div class="shift-badge" id="badge-${i}">da fare</div>
         </div>
       </div>`;
   }).join('');
 }
 
+  function updateShift(i, field, value) {
+  extractedShifts[i][field] = value;
+}
+  
 function checkInsertReady() {
-  if (accessToken && extractedShifts.length > 0) {
+  if (!accessToken) { alert('Devi prima accedere con Google'); return; }
+if (extractedShifts.length === 0) { alert('Nessun turno da inserire'); return; }
     document.getElementById('insertBtn').disabled = false;
   }
 }
