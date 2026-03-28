@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Turni → Calendario</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -87,7 +87,6 @@
     transition: border-color 0.2s, background 0.2s;
     position: relative;
   }
-  .upload-zone.active { border-color: var(--accent); background: var(--accent-dim); }
   .upload-zone input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
   .upload-icon { font-size: 32px; margin-bottom: 8px; }
   .upload-zone p { font-size: 14px; color: var(--text2); }
@@ -114,13 +113,13 @@
     background: var(--surface2);
     border-radius: var(--radius-sm);
     padding: 12px 14px;
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex; justify-content: space-between; align-items: flex-start;
   }
   .shift-day { font-size: 14px; font-weight: 500; }
-  .shift-time { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--accent); }
   .shift-badge {
     font-size: 11px; padding: 3px 8px; border-radius: 20px; font-weight: 500;
     background: var(--warn-dim); color: var(--warn);
+    white-space: nowrap; margin-top: 2px;
   }
   .shift-badge.done { background: var(--success-dim); color: var(--success); }
   .spinner {
@@ -133,6 +132,12 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .section-label { font-size: 12px; color: var(--text3); margin-bottom: 6px; font-family: 'DM Mono', monospace; }
+  input[type="text"], input[type="time"] {
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-family: 'DM Mono', monospace; font-size: 13px;
+    padding: 6px 8px;
+  }
   select {
     width: 100%; padding: 12px 14px;
     background: var(--surface2); color: var(--text);
@@ -183,7 +188,7 @@
     <div class="card-title"><div class="dot" id="photoDot"></div>Foto turni</div>
     <div style="margin-bottom:12px;">
       <div class="section-label">Data inizio settimana (es. 23/03/2026)</div>
-      <input type="text" id="weekStart" placeholder="GG/MM/AAAA" style="width:100%;padding:12px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:14px;" />
+      <input type="text" id="weekStart" placeholder="GG/MM/AAAA" style="width:100%;padding:12px 14px;" />
     </div>
     <div id="uploadArea">
       <div class="upload-zone" id="uploadZone">
@@ -201,9 +206,8 @@
   </div>
 
   <div class="card hidden" id="cardShifts">
-    <div class="card-title"><div class="dot blue"></div>Turni estratti</div>
+    <div class="card-title"><div class="dot blue"></div>Turni estratti — modifica se necessario</div>
     <div id="shiftsList" class="shifts-list"></div>
-    <div id="shiftNote" style="font-size:12px;color:var(--text3);margin-bottom:12px;"></div>
   </div>
 
   <div class="card hidden" id="cardInsert">
@@ -262,13 +266,14 @@ async function fetchUserInfo() {
     const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: 'Bearer ' + accessToken }
     });
+    if (!r.ok) { logout(); return; }
     const d = await r.json();
     document.getElementById('userEmail').textContent = d.email || 'Connesso';
     document.getElementById('authLoggedOut').classList.add('hidden');
     document.getElementById('authLoggedIn').classList.remove('hidden');
     document.getElementById('authDot').classList.add('green');
     checkInsertReady();
-  } catch(e) {}
+  } catch(e) { logout(); }
 }
 
 function logout() {
@@ -292,13 +297,12 @@ async function handlePhoto(input) {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const max = 1200;
+      const max = 1600;
       let w = img.width, h = img.height;
-      if (w > max) { h = h * max / w; w = max; }
-      if (h > max) { w = w * max / h; h = max; }
+      if (w > max) { h = Math.round(h * max / w); w = max; }
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      res(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+      res(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
     };
     img.src = URL.createObjectURL(file);
   });
@@ -319,18 +323,18 @@ function resetPhoto() {
 async function extractShifts() {
   const s = document.getElementById('extractStatus');
   const weekInput = document.getElementById('weekStart').value.trim();
+
   if (!weekInput) {
     s.innerHTML = `<div class="status warn">Inserisci la data di inizio settimana prima di caricare la foto.</div>`;
     return;
   }
-
   const parts = weekInput.split('/');
-  if (parts.length !== 3) {
-    s.innerHTML = `<div class="status warn">Formato data non valido. Usa GG/MM/AAAA es. 23/03/2026</div>`;
+  if (parts.length !== 3 || parts[0].length < 1 || parts[1].length < 1 || parts[2].length !== 4) {
+    s.innerHTML = `<div class="status warn">Formato non valido. Usa GG/MM/AAAA es. 23/03/2026</div>`;
     return;
   }
 
-  const monday = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T12:00:00`);
+  const monday = new Date(`${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}T12:00:00`);
   const weekDates = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
@@ -351,7 +355,7 @@ async function extractShifts() {
         max_tokens: 1000,
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: photoType, data: photoB64 } },
-          { type: 'text', text: `Questa e una striscia orizzontale di una tabella turni lavorativi. Contiene SOLO la riga di INTERDONATO ROBERTO senza intestazione.\n\nLa settimana inizia il lunedi e le date sono: ${weekInfo}\n\nLa tabella puo avere due formati:\n- Formato A: 7 colonne, una per giorno (Lun Mar Mer Gio Ven Sab Dom)\n- Formato B: 14 colonne, due per giorno (Intervallo turno + Commenti) ripetute 7 volte\n\nContando le colonne capisce quale formato e e associa ogni cella alla data corretta in ordine da sinistra a destra.\n\nPer ogni colonna orario: se c\'e un orario (es. 15:00-21:00) includilo. Se c\'e trattino o vuoto e un giorno di riposo, non includerlo.\nSe presente, leggi anche il commento della colonna accanto.\n\nRispondi SOLO con JSON array: [{"date":"YYYY-MM-DD","start":"HH:MM","end":"HH:MM","note":"commento o vuoto"}]. Zero testo aggiuntivo.` }
+          { type: 'text', text: `Questa e una tabella turni lavorativi settimanale. Le date della settimana sono gia note: ${weekInfo}. Non leggere le date dalla foto, usa quelle fornite.\n\nTrova la riga di INTERDONATO ROBERTO. La tabella puo avere due formati:\n- Formato A: 7 colonne orario, una per giorno\n- Formato B: 14 colonne, coppie di (Intervallo turno + Commenti) per ogni giorno\n\nPer ogni giorno da Lun a Dom, in ordine:\n1. Leggi la cella orario corrispondente nella riga di INTERDONATO ROBERTO\n2. Se c'e un orario (es. 06:00-14:00) includilo con la data corretta\n3. Se c'e trattino o vuoto saltalo\n4. Se c'e una cella Commenti accanto leggila\n\nRispondi SOLO con JSON: [{"date":"YYYY-MM-DD","start":"HH:MM","end":"HH:MM","note":""}]. Niente altro.` }
         ]}]
       })
     });
@@ -359,15 +363,15 @@ async function extractShifts() {
     const data = await resp.json();
     const text = data.content?.find(c => c.type === 'text')?.text?.trim() || '';
     const match = text.match(/\[[\s\S]*\]/);
-    if (!match) throw new Error('Risposta non valida: ' + text.substring(0, 100));
+    if (!match) throw new Error('Risposta non valida dall AI');
     extractedShifts = JSON.parse(match[0]);
 
     if (extractedShifts.length === 0) {
-      s.innerHTML = `<div class="status warn">Nessun turno trovato. Ricontrolla la foto.</div>`;
+      s.innerHTML = `<div class="status warn">Nessun turno trovato. Ricontrolla foto e data.</div>`;
       return;
     }
 
-    s.innerHTML = `<div class="status success fade-in">Trovati ${extractedShifts.length} turni</div>`;
+    s.innerHTML = `<div class="status success fade-in">Trovati ${extractedShifts.length} turni — controlla e correggi se necessario</div>`;
     renderShifts();
     document.getElementById('cardShifts').classList.remove('hidden');
     document.getElementById('cardInsert').classList.remove('hidden');
@@ -385,33 +389,28 @@ function renderShifts() {
   el.innerHTML = extractedShifts.map((s, i) => {
     const d = new Date(s.date + 'T12:00:00');
     const label = `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
-    const midnight = s.end < s.start;
     return `
       <div class="shift-row" id="shift-${i}">
         <div style="flex:1;">
           <div class="shift-day">${label}</div>
-          ${midnight ? `<div style="font-size:11px;color:var(--text3);">finisce il giorno dopo</div>` : ''}
           <div style="display:flex;gap:6px;margin-top:6px;align-items:center;">
-            <input type="time" value="${s.start}" onchange="updateShift(${i},'start',this.value)" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px;font-family:'DM Mono',monospace;">
+            <input type="time" value="${s.start}" onchange="updateShift(${i},'start',this.value)">
             <span style="color:var(--text3);font-size:12px;">→</span>
-            <input type="time" value="${s.end}" onchange="updateShift(${i},'end',this.value)" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px;font-family:'DM Mono',monospace;">
+            <input type="time" value="${s.end}" onchange="updateShift(${i},'end',this.value)">
           </div>
           ${s.note ? `<div style="font-size:11px;color:var(--text2);margin-top:4px;">${s.note}</div>` : ''}
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <div class="shift-badge" id="badge-${i}">da fare</div>
-        </div>
+        <div class="shift-badge" id="badge-${i}">da fare</div>
       </div>`;
   }).join('');
 }
 
-  function updateShift(i, field, value) {
+function updateShift(i, field, value) {
   extractedShifts[i][field] = value;
 }
-  
+
 function checkInsertReady() {
-  if (!accessToken) { alert('Devi prima accedere con Google'); return; }
-if (extractedShifts.length === 0) { alert('Nessun turno da inserire'); return; }
+  if (accessToken && extractedShifts.length > 0) {
     document.getElementById('insertBtn').disabled = false;
   }
 }
@@ -432,54 +431,47 @@ async function getOrCreateCalendar() {
   return cal.id;
 }
 
-async function extractShifts() {
-  const s = document.getElementById('extractStatus');
-  s.innerHTML = `<div class="status info"><div class="spinner"></div><span>Analisi struttura tabella...</span></div>`;
+async function insertEvents() {
+  if (!accessToken || extractedShifts.length === 0) return;
+  const btn = document.getElementById('insertBtn');
+  const s = document.getElementById('insertStatus');
+  const colorId = document.getElementById('eventColor').value;
+  btn.disabled = true;
+  s.innerHTML = `<div class="status info" style="margin-top:10px;"><div class="spinner"></div><span>Inserimento in corso...</span></div>`;
   try {
-    const call = async (prompt) => {
-      const resp = await fetch('https://turni-beryl.vercel.app/api/proxy', {
+    const calId = await getOrCreateCalendar();
+    let ok = 0;
+    for (let i = 0; i < extractedShifts.length; i++) {
+      const shift = extractedShifts[i];
+      let endDate = shift.date;
+      if (shift.end < shift.start) {
+        const d = new Date(shift.date + 'T00:00:00');
+        d.setDate(d.getDate() + 1);
+        endDate = d.toISOString().split('T')[0];
+      }
+      const body = {
+        summary: shift.note ? `Turno — ${shift.note}` : 'Turno lavoro',
+        colorId,
+        description: shift.note || '',
+        start: { dateTime: `${shift.date}T${shift.start}:00`, timeZone: 'Europe/Rome' },
+        end:   { dateTime: `${endDate}T${shift.end}:00`, timeZone: 'Europe/Rome' },
+        reminders: { useDefault: false, overrides: [] }
+      };
+      const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: [
-            { type: 'image', source: { type: 'base64', media_type: photoType, data: photoB64 } },
-            { type: 'text', text: prompt }
-          ]}]
-        })
+        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
       });
-      const data = await resp.json();
-      return data.content?.find(c => c.type === 'text')?.text?.trim() || '';
-    };
-
-    const step1 = await call('Guarda questa tabella turni. Dimmi: 1) Quante colonne ci sono in totale dopo la colonna Nome? 2) Le colonne hanno sottocolonne tipo "Commenti"? Si o no? 3) Elenca le date che vedi nella prima riga intestazione nel formato GG.M = YYYY-MM-DD. Rispondi in modo breve e preciso.');
-
-    s.innerHTML = `<div class="status info"><div class="spinner"></div><span>Estrazione turni in corso...</span></div>`;
-
-    const step2 = await call(`Questa e una tabella turni. Analisi struttura gia fatta: ${step1}\n\nOra trova la riga di INTERDONATO ROBERTO e per ogni data identificata nella struttura, leggi la cella "Intervallo turno" corrispondente. Ancora: OGNI DATA deve essere verificata — se la cella e vuota o ha trattino e un giorno di riposo, non includerla. Non spostare MAI un orario su una data diversa da quella della sua colonna.\n\nRispondi SOLO con JSON array: [{"date":"YYYY-MM-DD","start":"HH:MM","end":"HH:MM","note":"commento o vuoto"}]. Zero testo aggiuntivo.`);
-
-    console.log('STEP1:', step1);
-    console.log('STEP2:', step2);
-    const match = step2.match(/\[[\s\S]*\]/);
-    if (!match) throw new Error('Nessun JSON trovato nella risposta: ' + step2.substring(0, 200));
-    let parsed = JSON.parse(match[0]);
-    parsed = parsed.map(s => ({ ...s, date: s.date.replace(/^202[0-9]/, new Date().getFullYear().toString()) }));
-    extractedShifts = parsed;
-
-    if (extractedShifts.length === 0) {
-      s.innerHTML = `<div class="status warn">Nessun turno trovato. Ricontrolla la foto.</div>`;
-      return;
+      if (r.ok) {
+        ok++;
+        const badge = document.getElementById('badge-' + i);
+        if (badge) { badge.textContent = 'fatto'; badge.classList.add('done'); }
+      }
     }
-
-    s.innerHTML = `<div class="status success fade-in">Trovati ${extractedShifts.length} turni</div>`;
-    renderShifts();
-    document.getElementById('cardShifts').classList.remove('hidden');
-    document.getElementById('cardInsert').classList.remove('hidden');
-    checkInsertReady();
-
+    s.innerHTML = `<div class="status success fade-in" style="margin-top:10px;">✓ ${ok} eventi inseriti in "Turni Lavoro"</div>`;
   } catch(e) {
-    s.innerHTML = `<div class="status error">Errore: ${e.message}</div>`;
+    s.innerHTML = `<div class="status error" style="margin-top:10px;">Errore: ${e.message}</div>`;
+    btn.disabled = false;
   }
 }
 
